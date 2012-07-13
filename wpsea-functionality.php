@@ -3,7 +3,7 @@
 Plugin Name: WPSea Functionality
 Description: Functionality plugin for code/settings commonly use in the Seattle WordPress community
 Contributors: wpseattle, blobaugh, jaffe75
-Version: 0.5
+Version: 0.1
 Author: WordPress Seattle
 Author URI: http://www.meetup.com/SeattleWordPressMeetup/
 */
