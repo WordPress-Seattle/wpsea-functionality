@@ -7,7 +7,7 @@ Stable Tag: trunk
 License: GPLv2
 License URI: http://www.opensource.org/licenses/GPL-2.0
 
-A plugin that lets you quickly and easily create new themes.
+A functionality plugin created by the Seattle WordPress community
 
 == Description ==
 
