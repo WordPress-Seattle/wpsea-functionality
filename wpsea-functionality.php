@@ -1,11 +1,12 @@
 <?php
 /*
-Plugin Name: WPSea Awesome
+Plugin Name: WP Seattle Functionality
 Description: Functionality plugin for code/settings commonly use in the Seattle WordPress community. Provides Functionality this is common to most sites: Google Analytics, No wordpress update nag, Support Information Dashboard Widget
-Contributors: wpseattle, blobaugh, jaffe75, andrewwoods
-Version: 0.1
+Contributors: wpseattle, blobaugh, jaffe75, awoods
+Version: 0.7.4
 Author: WordPress Seattle
 Author URI: http://www.meetup.com/SeattleWordPressMeetup/
+License: GPLv2
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -28,23 +29,29 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 //---------------------------------
 define( 'WPSEA_FUNC_PLUGIN_DIR', trailingslashit( dirname( __FILE__) ) );
 define( 'WPSEA_FUNC_TEXT_DOMAIN', 'wpsea-func' );
-define( 'WPSEA_FUNC_VERSION', '0.1' );
-define( 'WPSEA_FUNC_PLUGIN_URL', plugin_dir_url( $file ) );
+define( 'WPSEA_FUNC_VERSION', '0.7.4' );
+define( 'WPSEA_FUNC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
-#- error_log('WPSEA_FUNC_PLUGIN_DIR=' . WPSEA_FUNC_PLUGIN_DIR);
-#- error_log('WPSEA_FUNC_PLUGIN_URL=' . WPSEA_FUNC_PLUGIN_URL);
 
 //---------------------------------
 //      HOOKS
 //---------------------------------
-remove_action( 'wp_head', 'wp_generator' );
-remove_action( 'wp_head', 'feed_links_extra', 3 );
-remove_action( 'wp_head', 'wlwmanifest_link' );
+if ( get_option( 'wpsea_func_generator_enabled' ) == 'no' ) {
+	remove_action( 'wp_head', 'wp_generator' );
+}
 
-// Get some wp-admin functionality rolling
-// if( is_admin() ) {
-//   require_once( WPSEA_FUNC_PLUGIN_DIR . 'lib/admin.php' );
-// }
+if ( get_option( 'wpsea_func_feed_links_enabled' ) == 'no' ) {
+	remove_action( 'wp_head', 'feed_links_extra', 3 ); 
+	remove_action( 'wp_head', 'feed_links', 2 ); 
+}
+
+if ( get_option( 'wpsea_func_wlwmanifest_enabled' ) == 'no' ) {
+	remove_action( 'wp_head', 'wlwmanifest_link' );
+}
+
+if ( get_option( 'wpsea_func_rsd_enabled' ) == 'no' ) {
+	remove_action( 'wp_head', 'rsd_link');
+}
 
 register_activation_hook( __FILE__, 'wpsea_func_setup' );
 register_uninstall_hook( __FILE__, 'wpsea_func_teardown' );
@@ -72,6 +79,11 @@ add_shortcode( 'wpsea_contactform', 'wpsea_func_contact_form' );
 //      FUNCTIONS
 //---------------------------------
 function wpsea_func_setup() {
+	add_option( 'wpsea_func_generator_enabled', 'yes' );
+	add_option( 'wpsea_func_feed_links_enabled', 'yes' );
+	add_option( 'wpsea_func_wlwmanifest_enabled', 'yes' );
+	add_option( 'wpsea_func_rsd_enabled', 'yes' );
+
 	add_option( 'wpsea_func_analytics_id' );
 	add_option( 'wpsea_func_analytics_enabled', 'yes' );
 	add_option( 'wpsea_func_noframes_enabled', 'no' );
@@ -80,6 +92,10 @@ function wpsea_func_setup() {
 }
 
 function wpsea_func_teardown() {
+	delete_option( 'wpsea_func_generator_enabled' );
+	delete_option( 'wpsea_func_feed_links_enabled' );
+	delete_option( 'wpsea_func_wlwmanifest_enabled' );
+
 	delete_option( 'wpsea_func_analytics_id' );
 	delete_option( 'wpsea_func_analytics_enabled' );
 	delete_option( 'wpsea_func_noframes_enabled' );
@@ -92,8 +108,8 @@ function wpsea_func_modify_menu() {
 	$_settings = wpsea_func_get_settings();
 
 	add_options_page(
-		$_settings['mlse_page_title'], // Page Title
-		$_settings['mlse_page_title'], // Sub-menu Title
+		$_settings['wpsea_func_page_title'], // Page Title
+		$_settings['wpsea_func_page_title'], // Sub-menu Title
 		'manage_options', // Minimum access control
 		__FILE__,
 		'wpsea_func_options_page' // collback function
@@ -107,15 +123,13 @@ function wpsea_func_modify_menu() {
 */
 function wpsea_func_get_settings() {  
 
-	// wpsea_func means Mastodon Labs Site Essentials
 	$output = array();  
 
 	// put together the output array  
-	$output['mlse_option_name']   = ''; // the option name as used in get_option().  
-	$output['mlse_page_title']    = __( 'Site Essentials', WPSEA_FUNC_TEXT_DOMAIN );
-	$output['mlse_author_name']   = __( 'Mastodon Labs', WPSEA_FUNC_TEXT_DOMAIN );
-	$output['mlse_author_email']  = __( 'andrew@mastodonlabs.com', WPSEA_FUNC_TEXT_DOMAIN );
-	$output['mlse_page_sections'] = wpsea_func_page_sections();   
+	$output['wpsea_func_option_name']   = ''; // the option name as used in get_option().  
+	$output['wpsea_func_page_title']    = __( 'Site Functionality', WPSEA_FUNC_TEXT_DOMAIN );
+	$output['wpsea_func_author_name']   = __( 'Wordpress Seattle Meetup', WPSEA_FUNC_TEXT_DOMAIN );
+	$output['wpsea_func_page_sections'] = wpsea_func_page_sections();   
 
 	return $output;  
 }  
@@ -132,9 +146,13 @@ function wpsea_func_page_sections() {
 		'title' => __( 'Main', WPSEA_FUNC_TEXT_DOMAIN ),
 		'callback' => 'wpsea_func_main_callback', 
 	);  
+	$sections['header_section'] = array(
+		'title' => __( 'Page Headers', WPSEA_FUNC_TEXT_DOMAIN ),
+		'callback' => 'wpsea_func_header_callback',
+		);  
 	$sections['analytics_section'] = array(
 		'title' => __( 'Analytics', WPSEA_FUNC_TEXT_DOMAIN ),
-  		'callback' => 'wpsea_func_analytics_callback',
+		'callback' => 'wpsea_func_analytics_callback',
 		);  
 	$sections['javascript_section'] = array( 
 		'title' => __( 'Javascript', WPSEA_FUNC_TEXT_DOMAIN ),
@@ -173,16 +191,16 @@ function wpsea_func_admin_init() {
 	$_settings = wpsea_func_get_settings();
 	$_sections = wpsea_func_page_sections();
 
-    // add_settings_section( $id, $title, $callback, $page );  
-    if ( isset( $_sections ) ) {
-        // call the "add_settings_section" for each!  
-        foreach ( $_sections as $id => $data ) {
+	// add_settings_section( $id, $title, $callback, $page );  
+	if ( isset( $_sections ) ) {
+		// call the "add_settings_section" for each!  
+		foreach ( $_sections as $id => $data ) {
 			$title    = $data['title'];
 			$callback = ( isset( $data['callback'] ) ) ? $data['callback'] : 'section_callback';
 
-            add_settings_section( $id, $title, $callback, 'wpsea_func' );
-        }  
-    }  
+			add_settings_section( $id, $title, $callback, 'wpsea_func' );
+		}  
+	}  
 
 	register_setting(
 		'analytics_section',
@@ -212,6 +230,38 @@ function wpsea_func_admin_init() {
 	register_setting(
 		'wpsea_func_main',
 		'wpsea_func_contact_sendto'
+	);
+
+	add_settings_field(
+		'wpsea_func_generator_enabled', // string used in the 'id' attribute of tags
+		'Generator Enabled', // Title of the Field
+		'wpsea_func_setting_generator_enabled', // function that renders the field
+		'wpsea_func', // the type of settings page on which to show the field
+		'header_section' // The section of the settings page in which to show the box
+	);
+
+	add_settings_field(
+		'wpsea_func_feed_links_enabled', // string used in the 'id' attribute of tags
+		'Feed Links Enabled', // Title of the Field
+		'wpsea_func_setting_feed_links_enabled', // function that renders the field
+		'wpsea_func', // the type of settings page on which to show the field
+		'header_section' // The section of the settings page in which to show the box
+	);
+
+	add_settings_field(
+		'wpsea_func_wlwmanifest_enabled', // string used in the 'id' attribute of tags
+		'WLW Manifest Enabled', // Title of the Field
+		'wpsea_func_setting_wlwmanifest_enabled', // function that renders the field
+		'wpsea_func', // the type of settings page on which to show the field
+		'header_section' // The section of the settings page in which to show the box
+	);
+
+	add_settings_field(
+		'wpsea_func_rsd_enabled', // string used in the 'id' attribute of tags
+		'RSD Enabled', // Title of the Field
+		'wpsea_func_setting_rsd_enabled', // function that renders the field
+		'wpsea_func', // the type of settings page on which to show the field
+		'header_section' // The section of the settings page in which to show the box
 	);
 
 	add_settings_field(
@@ -272,6 +322,14 @@ function wpsea_func_main_callback() {
 <?php	
 }
 
+function wpsea_func_header_callback() {
+?>
+	<p>
+		These settings update actions that modify the page head of your theme
+	</p>
+<?php
+}
+
 function wpsea_func_analytics_callback() {
 ?>
 	<p>
@@ -311,7 +369,7 @@ function wpsea_func_shortcode_callback() {
 	</p>
 	
 	<p> <strong>Implement the basic contact form:</strong><br />
-		[essential_contactform]
+		[wpsea_contactform]
 		<br />
 		<br/>
 		The form will submit the information to the same page, and send the form data
@@ -319,19 +377,19 @@ function wpsea_func_shortcode_callback() {
 	</p>
 
 	<p> <strong>Use a different email address to send to:</strong><br/>
-		[essential_contactform send_to="new_email@hostname.com"]
+		[wpsea_contactform send_to="new_email@hostname.com"]
 		<br />
 		<br />
 	</p>
 
 	<p> <strong>To Redirect the user to a new page upon success:</strong><br/>
-		[essential_contactform redirect_to="/thank-you"]
+		[wpsea_contactform redirect_to="/thank-you"]
 	</p>
 
 	<p> <strong>Add some information above the form</strong><br/>
-		[essential_contactform sendto="new_email@hostname.com"]<br />
+		[wpsea_contactform sendto="new_email@hostname.com"]<br />
 			&nbsp;&nbsp;&nbsp;&nbsp;This will be displayed above the form<br/> 
-		[/essential_contactform]
+		[/wpsea_contactform]
 	</p>
 <?php
 }
@@ -340,8 +398,8 @@ function wpsea_func_shortcode_callback() {
 function wpsea_func_widget_callback() {
 ?>
 	<p>
-		There are 2 <a href="<?php echo admin_url('widgets.php'); ?>">widgets</a> that come with this module - 
-		<strong>Essential Popular Posts</strong>, 
+		There are 2 <a href="<?php echo admin_url('widgets.php'); ?>">widgets</a> 
+		that come with this module - <strong>Essential Popular Posts</strong>, 
 		and <strong>Essential Latest Post</strong>
 	</p>
 <?php
@@ -364,9 +422,140 @@ function wpsea_func_setting_analytics_id() {
 }
 
 /**
+ * Render the Generator Enabled field
+ *
+ * @since 0.3
+ *
+ * @param  wp_option $wpsea_func_generator_enabled
+ * @return void
+*/
+function wpsea_func_setting_generator_enabled() {
+	$generator_enabled = get_option( 'wpsea_func_generator_enabled', 'yes' );
+
+	if ( $generator_enabled == 'yes' ) {
+		?>
+		<input type="radio" id="wpsea_func_generator_enabled_yes" 
+		name="wpsea_func_generator_enabled" checked="checked" value="yes"/>
+		<label for="wpsea_func_generator_enabled_yes">Yes</label>
+		<input type="radio" id="wpsea_func_generator_enabled_no" 
+		name="wpsea_func_generator_enabled" value="no"/>
+		  <label for="wpsea_func_generator_enabled_no">No</label>
+		<?php
+	} else {
+	?>
+		<input type="radio" id="wpsea_func_generator_enabled_yes" 
+		name="wpsea_func_generator_enabled" value="yes"/>
+		<label for="wpsea_func_generator_enabled_yes">Yes</label>
+		<input type="radio" id="wpsea_func_generator_enabled_no" 
+		name="wpsea_func_generator_enabled" checked="checked" value="no"/>
+		<label for="wpsea_func_generator_enabled_no">No</label>
+	<?php
+	}
+}
+
+/**
+ * Render the Manifest Enabled field
+ *
+ * @since 0.3
+ *
+ * @param  wp_option $wpsea_func_wlwmanifest_enabled
+ * @return void
+*/
+function wpsea_func_setting_wlwmanifest_enabled() {
+	$wlwmanifest_enabled = get_option( 'wpsea_func_wlwmanifest_enabled', 'yes' );
+	?>
+	<p>Determine if <em>Windows Live Writer(WLW) manifest</em> should be available.</p>
+	<?php
+	if ( $wlwmanifest_enabled == 'yes' ) {
+		?>
+		<input type="radio" id="wpsea_func_wlwmanifest_enabled_yes" 
+		name="wpsea_func_wlwmanifest_enabled" checked="checked" value="yes"/>
+		<label for="wpsea_func_wlwmanifest_enabled_yes">Yes</label>
+		<input type="radio" id="wpsea_func_wlwmanifest_enabled_no" 
+		name="wpsea_func_wlwmanifest_enabled" value="no"/>
+		  <label for="wpsea_func_wlwmanifest_enabled_no">No</label>
+		<?php
+	} else {
+	?>
+		<input type="radio" id="wpsea_func_wlwmanifest_enabled_yes" 
+		name="wpsea_func_wlwmanifest_enabled" value="yes"/>
+		<label for="wpsea_func_wlwmanifest_enabled_yes">Yes</label>
+		<input type="radio" id="wpsea_func_wlwmanifest_enabled_no" 
+		name="wpsea_func_wlwmanifest_enabled" checked="checked" value="no"/>
+		<label for="wpsea_func_wlwmanifest_enabled_no">No</label>
+	<?php
+	}
+}
+
+/**
+ * Render the Feed Links Enabled field
+ *
+ * @since 0.3
+ *
+ * @param  wp_option $wpsea_func_feed_links_enabled
+ * @return void
+*/
+function wpsea_func_setting_feed_links_enabled() {
+	$feed_links_enabled = get_option( 'wpsea_func_feed_links_enabled', 'yes' );
+
+	if ( $feed_links_enabled == 'yes' ) {
+		?>
+		<input type="radio" id="wpsea_func_feed_links_enabled_yes" 
+		name="wpsea_func_feed_links_enabled" checked="checked" value="yes"/>
+		<label for="wpsea_func_feed_links_enabled_yes">Yes</label>
+		<input type="radio" id="wpsea_func_feed_links_enabled_no" 
+		name="wpsea_func_feed_links_enabled" value="no"/>
+		  <label for="wpsea_func_feed_links_enabled_no">No</label>
+		<?php
+	} else {
+	?>
+		<input type="radio" id="wpsea_func_feed_links_enabled_yes" 
+		name="wpsea_func_feed_links_enabled" value="yes"/>
+		<label for="wpsea_func_feed_links_enabled_yes">Yes</label>
+		<input type="radio" id="wpsea_func_feed_links_enabled_no" 
+		name="wpsea_func_feed_links_enabled" checked="checked" value="no"/>
+		<label for="wpsea_func_feed_links_enabled_no">No</label>
+	<?php
+	}
+}
+
+/**
+ * Render the RSD Enabled field
+ *
+ * @since 0.3
+ *
+ * @param  wp_option $wpsea_func_rsd_enabled
+ * @return void
+*/
+function wpsea_func_setting_rsd_enabled() {
+	$rsd_enabled = get_option( 'wpsea_func_rsd_enabled', 'yes' );
+
+	if ( $rsd_enabled == 'yes' ) {
+		?>
+		<input type="radio" id="wpsea_func_rsd_enabled_yes" 
+		name="wpsea_func_rsd_enabled" checked="checked" value="yes"/>
+		<label for="wpsea_func_rsd_enabled_yes">Yes</label>
+		<input type="radio" id="wpsea_func_rsd_enabled_no" 
+		name="wpsea_func_rsd_enabled" value="no"/>
+		  <label for="wpsea_func_rsd_enabled_no">No</label>
+		<?php
+	} else {
+	?>
+		<input type="radio" id="wpsea_func_rsd_enabled_yes" 
+		name="wpsea_func_rsd_enabled" value="yes"/>
+		<label for="wpsea_func_rsd_enabled_yes">Yes</label>
+		<input type="radio" id="wpsea_func_rsd_enabled_no" 
+		name="wpsea_func_rsd_enabled" checked="checked" value="no"/>
+		<label for="wpsea_func_rsd_enabled_no">No</label>
+	<?php
+	}
+}
+
+
+/**
  * Render the Google Analytics Enabled field
  *
- * @since 0.2
+ * @since 0.7
  *
  * @param  wp_option $wpsea_func_analytics_enabled
  * @return void
@@ -401,7 +590,7 @@ function wpsea_func_setting_analytics_enabled() {
  *
  * Long Description
  *
- * @since 0.2
+ * @since 0.7
  *
  * @param  type $name  it does something
  * @return type        it does something
@@ -433,7 +622,7 @@ function wpsea_func_setting_jquery_enabled() {
 /**
  * Render the Use Googles JQuery field
  *
- * @since 0.2
+ * @since 0.7
  *
  * @param  wp_option $wpsea_func_googles_jquery
  * @return void
@@ -573,6 +762,11 @@ function wpsea_func_options_page() {
 	$errors = array();
 
 	if ( isset($_POST['wpsea_func_submit_button']) ) {
+		update_option( 'wpsea_func_generator_enabled', $_POST['wpsea_func_generator_enabled'] );
+		update_option( 'wpsea_func_feed_links_enabled', $_POST['wpsea_func_feed_links_enabled'] );
+		update_option( 'wpsea_func_wlwmanifest_enabled', $_POST['wpsea_func_wlwmanifest_enabled'] );
+		update_option( 'wpsea_func_rsd_enabled', $_POST['wpsea_func_rsd_enabled'] );
+
 		update_option( 'wpsea_func_analytics_id', $_POST['wpsea_func_analytics_id'] );
 		update_option( 'wpsea_func_analytics_enabled', $_POST['wpsea_func_analytics_enabled'] );
 		update_option( 'wpsea_func_noframes_enabled', $_POST['wpsea_func_noframes_enabled'] );
@@ -597,9 +791,8 @@ function wpsea_func_options_page() {
 
 	?>
 	<div class="wrap">
-		<h2><?php echo $_settings['mlse_page_title']; ?></h2>
-		<div>Send any plugin issues to <?php echo $_settings['mlse_author_name']; ?>
-		at <?php echo $_settings['mlse_author_email']; ?></div>
+		<h2><?php echo $_settings['wpsea_func_page_title']; ?></h2>
+		<div>Send any plugin issues to <?php echo $_settings['wpsea_func_author_name']; ?></div>
 		<?php if ( $errors ){
 			?>
 			<div style="color: red; font-size: 18px; ">
@@ -634,18 +827,27 @@ function wpsea_func_options_page() {
  * @return void
 */
 function wpsea_func_load_jquery() {
+	$use_jquery = get_option( 'wpsea_func_load_jquery_enabled' );
 	$use_googles_jquery = get_option( 'wpsea_func_googles_jquery' );
 
-	if ( $use_googles_jquery == 'yes' ){
-		$google_js_url = 'http://ajax.googleapis.com/ajax/libs/jquery/1.4.3/jquery.min.js';
+	if ( $use_jquery == 'yes' ){
 
-		wp_deregister_script( 'jquery' );
-		wp_register_script( 'jquery', $google_js_url );
+		if ( $use_googles_jquery == 'yes' ){
+			$google_js_url = 'http://ajax.googleapis.com/ajax/libs/jquery/1.4.3/jquery.min.js';
+
+			wp_deregister_script( 'jquery' );
+			wp_register_script( 'jquery', $google_js_url );
+
+		} else {
+			// load standard query
+			wp_enqueue_script( 'jquery' );
+		} 
+
 	}
 }
 
 /**
- * Attach the site-essential.js to the html page
+ * Attach site_essential.js to the html page
  *
  * @return void
 */
@@ -653,21 +855,21 @@ function wpsea_func_load_js() {
 	$in_footer    = false;
 
 	try {
-		$essential_js = wpsea_func_get_filename( true );
+		$essential_js =  WPSEA_FUNC_PLUGIN_URL . 'js/site_essential.js';
 	} catch (Exception $e) {
-		error_log("RAT FARTS! e=" . $e->getMessage() );
+		error_log("Exception occurred getting filename! " . $e->getMessage() );
 	}
 
-	$ver          = date( 'Ymd' );
 	$dependencies = array();
 
 	wp_enqueue_script(
-		'site_essential',
+		'wpsea_func_main',
 		$essential_js,
 		$dependencies,
 		WPSEA_FUNC_VERSION,
 		$in_footer
 	);
+	
 }
 
 /**
@@ -776,6 +978,8 @@ function no_update_nag() {
 */
 function wpsea_func_contact_form( $attr, $content = false ) {
 
+	$errors = array();
+
 	if ( isset( $_POST['submit_button'] ) ){
 		if ( isset( $attr['send_to'] ) ) {
 			$errors = wpsea_func_contactform_submit( $attr['send_to'] );
@@ -784,7 +988,7 @@ function wpsea_func_contact_form( $attr, $content = false ) {
 		}
 	} else {
 ?>
-	<form id="ml-essential-contact-form" class="contact" action="" method="post">
+	<form id="wpsea-func-contact-form" class="contact" action="" method="post">
 
 		<?php 
 		if ( $content ) {
@@ -796,7 +1000,7 @@ function wpsea_func_contact_form( $attr, $content = false ) {
 		<?php
 		if ( count( $errors ) > 0 ){
 				echo '<div class="message error">';
-				echo implode( '<br />', $wpsea_func_errors );
+				echo implode( '<br />', $errors );
 				echo '</div>';
 		}
 
@@ -845,8 +1049,7 @@ function wpsea_func_contact_form( $attr, $content = false ) {
 			?></textarea>
 		</div>
 		<div>
-			<input id="submit_button" type="submit" name="submit_button" value="
-			Send Message " />
+			<input id="submit_button" type="submit" name="submit_button" value="Send Message " />
 		</div>
 
 	</form>
@@ -880,6 +1083,11 @@ function wpsea_func_contactform_submit( $send_to = false ) {
 	global $wpsea_func_errors;
 
 	$to_address = get_option( 'wpsea_func_contact_sendto' );
+	if ( $send_to ){
+		// Use the designer-specified value in the shortcode 
+		$to_address = $send_to;
+	}
+
 
 	if ( array_key_exists( 'submit_button', $_POST ) ) {
 		$strip_regex = '~\\\\~';
@@ -1148,8 +1356,8 @@ function wpsea_func_init() {
 	$popular_title = __( 'Essential Popular Posts' );
 	$latest_title  = __( 'Essential Latest Post' );
 
-	register_sidebar_widget( $popular_title, 'wpsea_func_widget_popular_posts' );
-	register_sidebar_widget( $latest_title, 'wpsea_func_widget_latest_post' );
+	wp_register_sidebar_widget( 'wpsea_func_widget_popular_posts_id', $popular_title, 'wpsea_func_widget_popular_posts' );
+	wp_register_sidebar_widget( 'wpsea_func_widget_latest_post_id', $latest_title, 'wpsea_func_widget_latest_post' );
 }
 
 //---------------------------------
