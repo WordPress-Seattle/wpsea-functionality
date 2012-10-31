@@ -3,7 +3,7 @@
 Plugin Name: WP Seattle Functionality
 Description: Functionality plugin for code/settings commonly use in the Seattle WordPress community. Provides Functionality this is common to most sites: Google Analytics, No wordpress update nag, Support Information Dashboard Widget
 Contributors: wpseattle, blobaugh, jaffe75, awoods
-Version: 0.7.4
+Version: 0.7.5
 Author: WordPress Seattle
 Author URI: http://www.meetup.com/SeattleWordPressMeetup/
 License: GPLv2
@@ -29,10 +29,16 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 //---------------------------------
 define( 'WPSEA_FUNC_PLUGIN_DIR', trailingslashit( dirname( __FILE__) ) );
 define( 'WPSEA_FUNC_TEXT_DOMAIN', 'wpsea-func' );
-define( 'WPSEA_FUNC_VERSION', '0.7.4' );
-define( 'WPSEA_FUNC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+define( 'WPSEA_FUNC_VERSION', '0.7.5' );
 
+$wpsea_func_google_jquery_all_versions = array(
+	'1.8.2', '1.8.1', '1.8.0', // 2012 Aug 09 => 1.8
+	'1.7.2', '1.7.1', '1.7.0', // 2011 Nov 03 => 1.7
+	'1.6.4', '1.6.3', '1.6.2', '1.6.1', '1.6', //  2011 May 03 => 1.6
+	'1.5.2', '1.5.1', '1.5' // 2011 Jan 31 => 1.5 
+);
 
+$wpsea_func_admin_messages = array('ERROR' => array(), 'NOTICE' => array());
 //---------------------------------
 //      HOOKS
 //---------------------------------
@@ -57,21 +63,22 @@ register_activation_hook( __FILE__, 'wpsea_func_setup' );
 register_uninstall_hook( __FILE__, 'wpsea_func_teardown' );
 
 add_action( 'init', 'wpsea_func_load_jquery' );
-
 add_action( 'plugins_loaded', 'wpsea_func_init' );
-
 add_action( 'wp_enqueue_scripts', 'wpsea_func_load_js' );
-
 add_action( 'admin_init', 'no_update_nag' );
 add_action( 'admin_init', 'wpsea_func_admin_init' );
 add_action( 'admin_menu', 'wpsea_func_modify_menu' );
-
+add_action( 'admin_notices', 'wpsea_func_show_admin_messages');     
 add_action( 'wp_dashboard_setup', 'example_remove_dashboard_widgets' );
 add_action( 'wp_dashboard_setup', 'wpsea_func_add_dashboard_widgets' );
 
 if ( get_option( 'wpsea_func_analytics_enabled' ) == 'yes' ) {
 	add_action( 'wp_footer', 'wpsea_func_analytics_js' );
 }
+
+add_filter( 'plugin_action_links', 'wpsea_func_settings_link', 10, 2 );
+add_filter( 'user_contactmethods', 'wpsea_func_modify_user_contacts_methods' );
+
 add_shortcode( 'wpsea_contactform', 'wpsea_func_contact_form' );
 
 
@@ -89,18 +96,21 @@ function wpsea_func_setup() {
 	add_option( 'wpsea_func_noframes_enabled', 'no' );
 	add_option( 'wpsea_func_load_jquery', 'no' );
 	add_option( 'wpsea_func_googles_jquery', 'no' );
+	add_option( 'wpsea_func_googles_jquery_version', '1.8.2' );
 }
 
 function wpsea_func_teardown() {
 	delete_option( 'wpsea_func_generator_enabled' );
 	delete_option( 'wpsea_func_feed_links_enabled' );
 	delete_option( 'wpsea_func_wlwmanifest_enabled' );
+	delete_option( 'wpsea_func_rsd_enabled');
 
 	delete_option( 'wpsea_func_analytics_id' );
 	delete_option( 'wpsea_func_analytics_enabled' );
 	delete_option( 'wpsea_func_noframes_enabled' );
 	delete_option( 'wpsea_func_load_jquery' );
 	delete_option( 'wpsea_func_googles_jquery' );
+	delete_option( 'wpsea_func_googles_jquery_version' );
 }
 
 function wpsea_func_modify_menu() {
@@ -111,7 +121,7 @@ function wpsea_func_modify_menu() {
 		$_settings['wpsea_func_page_title'], // Page Title
 		$_settings['wpsea_func_page_title'], // Sub-menu Title
 		'manage_options', // Minimum access control
-		__FILE__,
+		'wpsea_func_settings',
 		'wpsea_func_options_page' // collback function
 	);
 }
@@ -228,6 +238,11 @@ function wpsea_func_admin_init() {
 	);
 
 	register_setting(
+		'javascript_section',
+		'wpsea_func_googles_jquery_version'
+	);
+
+	register_setting(
 		'wpsea_func_main',
 		'wpsea_func_contact_sendto'
 	);
@@ -305,14 +320,101 @@ function wpsea_func_admin_init() {
 	);
 
 	add_settings_field(
+		'wpsea_func_googles_jquery_version', // string used in the 'id' attribute of tags
+		'Use this Googles jQuery version',  // Title of the Field
+		'wpsea_func_setting_googles_jquery_version', // function that renders the field
+		'wpsea_func', // the type of settings page on which to show the field
+		'javascript_section' // The section of the settings page in which to show the box
+	);
+
+	add_settings_field(
 		'wpsea_func_contact_sendto', // string used in the 'id' attribute of tags
 		'Send Contact Form To',  // Title of the Field
 		'wpsea_func_setting_contact_sendto', // function that renders the field
 		'wpsea_func', // the type of settings page on which to show the field
 		'wpsea_func_main' // The section of the settings page in which to show the box
 	);
+	
+	wpsea_func_check_permissions();
+}
+
+
+function wpsea_func_check_permissions() {
+
+	global $wpsea_func_admin_messages;
+
+	$js_filename = wpsea_func_get_filename();
+	$writable = wpsea_func_check_writable($js_filename, 'w');	
+
+	$message = $js_filename;
+	$message .= ($writable === TRUE) ? ' IS writable': ' IS NOT writable';
+	if ( ! $writable ) {
+		if ( WP_DEBUG ) {
+			error_log('check permissions message: ' . $message );	
+		}
+
+		$wpsea_func_admin_messages['ERROR'][] = $message;
+	}
 
 }
+
+
+/**
+* Check that the file or directory has a desired permission.
+*
+* validate that a permission exists before trying to perform it on a file or directory.  
+*
+* @since 0.7.5
+*
+* @param string $path  can be a file or directory
+* @param string $perm can be any combination of  r, w, x.  
+* @return boolean
+*/
+function wpsea_func_check_writable($path, $perm = 'r') {
+	
+	if ( strstr($perm, 'w') && is_writable($path) ) {
+		error_log('check_permissions path=' . $path . ' is writable');
+		return TRUE;
+	}
+	error_log('check_permissions path=' . $path . ' is NOT writable');
+
+	return FALSE;
+}
+
+/**
+* Generic function to show a message to the user using WP's 
+* standard CSS classes to make use of the already-defined
+* message colour scheme.
+*
+* @param $message The message you want to tell the user.
+* @param $errormsg If true, the message is an error, so use 
+* the red message style. If false, the message is a status 
+* message, so use the yellow information message style.
+*/
+function wpsea_func_show_admin_messages() {
+
+	global $wpsea_func_admin_messages;
+
+	if ( sizeof($wpsea_func_admin_messages['ERROR']) > 0 ) {
+		echo '<div id="message" class="error">';
+		foreach ( $wpsea_func_admin_messages['ERROR'] AS $message ) {
+			// do stuff
+			echo '<p><strong>' . $message . '</strong></p>';
+		}
+		echo '</div>';
+	}
+
+	if ( sizeof($wpsea_func_admin_messages['NOTICE']) > 0 ) {
+		echo '<div id="message" class="updated fade">';
+		foreach ( $wpsea_func_admin_messages['NOTICE'] AS $message ) {
+			// do stuff
+			echo '<p><strong>' . $message . '</strong></p>';
+		}
+		echo '</div>';
+	}
+
+}   
+
 
 function wpsea_func_main_callback() {
 ?>	
@@ -437,6 +539,7 @@ function wpsea_func_setting_generator_enabled() {
 		<input type="radio" id="wpsea_func_generator_enabled_yes" 
 		name="wpsea_func_generator_enabled" checked="checked" value="yes"/>
 		<label for="wpsea_func_generator_enabled_yes">Yes</label>
+
 		<input type="radio" id="wpsea_func_generator_enabled_no" 
 		name="wpsea_func_generator_enabled" value="no"/>
 		  <label for="wpsea_func_generator_enabled_no">No</label>
@@ -446,6 +549,7 @@ function wpsea_func_setting_generator_enabled() {
 		<input type="radio" id="wpsea_func_generator_enabled_yes" 
 		name="wpsea_func_generator_enabled" value="yes"/>
 		<label for="wpsea_func_generator_enabled_yes">Yes</label>
+		
 		<input type="radio" id="wpsea_func_generator_enabled_no" 
 		name="wpsea_func_generator_enabled" checked="checked" value="no"/>
 		<label for="wpsea_func_generator_enabled_no">No</label>
@@ -492,8 +596,6 @@ function wpsea_func_setting_wlwmanifest_enabled() {
  *
  * @since 0.3
  *
- * @param  wp_option $wpsea_func_feed_links_enabled
- * @return void
 */
 function wpsea_func_setting_feed_links_enabled() {
 	$feed_links_enabled = get_option( 'wpsea_func_feed_links_enabled', 'yes' );
@@ -652,6 +754,23 @@ function wpsea_func_setting_googles_jquery() {
 	}
 }
 
+function wpsea_func_setting_googles_jquery_version() {
+	global $wpsea_func_google_jquery_all_versions;
+
+	$jquery_version = get_option( 'wpsea_func_googles_jquery_version' );
+
+	?>
+	<select name="wpsea_func_googles_jquery_version">
+	<?php foreach ( $wpsea_func_google_jquery_all_versions AS $value ): 
+		$checked = ($jquery_version == $value) ? ' selected="selected"' : '';	
+	?>
+		<option<?php echo $checked; ?>><?php echo $value; ?></option>
+	<?php endforeach; ?>
+	</select>
+	<?php
+}
+
+
 /**
  * Render the No Frames field for the Settings page
  *
@@ -772,6 +891,7 @@ function wpsea_func_options_page() {
 		update_option( 'wpsea_func_noframes_enabled', $_POST['wpsea_func_noframes_enabled'] );
 		update_option( 'wpsea_func_load_jquery_enabled', $_POST['wpsea_func_load_jquery_enabled'] );
 		update_option( 'wpsea_func_googles_jquery', $_POST['wpsea_func_googles_jquery'] );
+		update_option( 'wpsea_func_googles_jquery_version', $_POST['wpsea_func_googles_jquery_version'] );
 		update_option( 'wpsea_func_contact_sendto', $_POST['wpsea_func_contact_sendto'] );
 
 		$check = array();
@@ -825,24 +945,22 @@ function wpsea_func_options_page() {
  *
  * @param  wp_option $wpsea_func_googles_jquery
  * @return void
-*/
+ */
 function wpsea_func_load_jquery() {
 	$use_jquery = get_option( 'wpsea_func_load_jquery_enabled' );
 	$use_googles_jquery = get_option( 'wpsea_func_googles_jquery' );
+	$googles_jquery_version = get_option( 'wpsea_func_googles_jquery_version' );
 
 	if ( $use_jquery == 'yes' ){
 
 		if ( $use_googles_jquery == 'yes' ){
-			$google_js_url = 'http://ajax.googleapis.com/ajax/libs/jquery/1.4.3/jquery.min.js';
+			$google_js_url = 'http://ajax.googleapis.com/ajax/libs/jquery/' . $googles_jquery_version . '/jquery.min.js';
 
 			wp_deregister_script( 'jquery' );
 			wp_register_script( 'jquery', $google_js_url );
-
-		} else {
-			// load standard query
-			wp_enqueue_script( 'jquery' );
 		} 
 
+		wp_enqueue_script( 'jquery' );
 	}
 }
 
@@ -850,12 +968,14 @@ function wpsea_func_load_jquery() {
  * Attach site_essential.js to the html page
  *
  * @return void
-*/
+ */
 function wpsea_func_load_js() {
 	$in_footer    = false;
 
 	try {
-		$essential_js =  WPSEA_FUNC_PLUGIN_URL . 'js/site_essential.js';
+		$essential_js = plugins_url('wpsea-functionality/js/site_essential.js');
+		error_log('-WPSEA_FUNC_ESSENTIAL_JS_URL=' . $essential_js);
+
 	} catch (Exception $e) {
 		error_log("Exception occurred getting filename! " . $e->getMessage() );
 	}
@@ -927,23 +1047,8 @@ function wpsea_func_killframes() {
 function wpsea_func_add_dashboard_widgets() {
 	global $wp_meta_boxes;
 
-	wp_add_dashboard_widget(
-		'custom_help_widget',
-		'Website Support',
-		'wpsea_func_website_help'
-	);
 }
 
-/**
- * Display Help to your Client 
-*/
-function wpsea_func_website_help() {
-	?>
-	<h4>Need help with your website?</h4>
-	<p>Contact Company Name by email <strong>support@yourcompany.com</strong>
-	or by phone <strong>206-555-1212</strong></p>
-	<?php
-}
 
 /**
  * Removes some of the cruft on the Dashboard
@@ -1270,7 +1375,7 @@ function wpsea_func_form_validate( $data ) {
  * @return String $file full file system path
 */
 function wpsea_func_get_filename( $use_url = false ) {
-	$filename = 'site_essential.js';
+	$filename = 'js/site_essential.js';
 
 	if ( $use_url ){
 		error_log( 'use_url=true filename=' . $filename );
@@ -1324,7 +1429,7 @@ function wpsea_func_widget_popular_posts( $args ) {
  *
  * @param  array $args
  * @return void
-*/
+ */
 function wpsea_func_widget_latest_post( $args ) {
 
   global $wpdb;
@@ -1359,6 +1464,32 @@ function wpsea_func_init() {
 	wp_register_sidebar_widget( 'wpsea_func_widget_popular_posts_id', $popular_title, 'wpsea_func_widget_popular_posts' );
 	wp_register_sidebar_widget( 'wpsea_func_widget_latest_post_id', $latest_title, 'wpsea_func_widget_latest_post' );
 }
+
+
+function wpsea_func_modify_user_contacts_methods( $user_contactmethods ) {
+
+	/* Add user contact methods */
+	$user_contactmethods['skype'] = 'Skype Username'; 
+	$user_contactmethods['twitter'] = 'Twitter Username'; 
+	$user_contactmethods['facebook_url'] = 'Facebook URL'; 
+	$user_contactmethods['linkedin_url'] = 'LinkedIn URL'; 
+
+	/* Remove user contact methods */
+	unset($user_contactmethods['yim']); 
+	unset($user_contactmethods['aim']); 
+	unset($user_contactmethods['jabber']); 
+
+	return $user_contactmethods;
+} 
+
+// Add settings link on plugin page
+function wpsea_func_settings_link($links) { 
+	$settings_link = '<a href="options-general.php?page=wpsea_func_settings">Settings</a>'; 
+	array_unshift($links, $settings_link); 
+
+	return $links; 
+}
+ 
 
 //---------------------------------
 //   INTERFACES
