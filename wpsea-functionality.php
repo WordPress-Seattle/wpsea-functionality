@@ -372,7 +372,7 @@ function wpsea_func_check_permissions() {
 */
 function wpsea_func_check_writable($path, $perm = 'r') {
 	
-	if ( strstr($perm, 'w') && is_writable($path) ) {
+	if ( strstr($perm, 'w') && ( is_writable( dirname( $path ) ) || is_writable( $path ) ) ) {
 		error_log('check_permissions path=' . $path . ' is writable');
 		return TRUE;
 	}
