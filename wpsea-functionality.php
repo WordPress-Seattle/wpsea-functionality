@@ -1254,17 +1254,7 @@ function wpsea_func_contactform_submit( $send_to = false ) {
  * @return void
 */
 function wpsea_func_form_thank_you( $message = false ) {
-
-	if ( !$message ) {
-		$message = 'Thank you for contacting us. You will hear from us shortly.';
-	}
-
-	?>
-		<h2>Thank you</h2>
-		<p>
-			<?php echo $message; ?>
-		</p>
-	<?php
+	do_action('wpsea_func_thank_you');
 }
 
 
@@ -1485,7 +1475,7 @@ function wpsea_func_modify_user_contacts_methods( $user_contactmethods ) {
 // Add settings link on plugin page
 function wpsea_func_settings_link($links) { 
 	$settings_link = '<a href="options-general.php?page=wpsea_func_settings">Settings</a>'; 
-	array_unshift($links, $settings_link); 
+#	array_unshift($links, $settings_link); 
 
 	return $links; 
 }
@@ -1505,6 +1495,8 @@ interface DashboardWidget {
 	function update( $new_instance, $old_instance );
 	function form( $instance );
 }
+
+require_once('lib/plugin-generator.php'); 
 
 //=================================================================
 //						   END OF PLUGIN
