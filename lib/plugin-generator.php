@@ -14,7 +14,7 @@ class WPSea_Plugin_Generator {
 		$this->section['HEADER'] = array(
 		  'ID' => 'wpsea_plugin_header_section'
 		  ,'LABEL' => 'Plugin Header'
-		  ,'FIELDS' => array('PLUGIN_NAME', 'PLUGIN_VERSION', 'PLUGIN_DESC', 'AUTHOR_NAME', 'AUTHOR_URI')
+		  ,'FIELDS' => array('PLUGIN_NAME', 'PLUGIN_VERSION', 'PLUGIN_URI', 'PLUGIN_DESC', 'AUTHOR_NAME', 'AUTHOR_URI')
 		);
 
 		$this->section['HOOKS'] = array(
@@ -41,6 +41,12 @@ class WPSea_Plugin_Generator {
 		$this->field['PLUGIN_VERSION'] = array(
 			'ID' => 'plugin_version'
 			, 'LABEL' => 'Plugin Version'
+			, 'TYPE' => 'text'
+		);
+
+		$this->field['PLUGIN_URI'] = array(
+			'ID' => 'plugin_uri'
+			, 'LABEL' => 'Plugin URI'
 			, 'TYPE' => 'text'
 		);
 
@@ -293,8 +299,9 @@ class WPSea_Plugin_Generator {
 
 	}
 
-	public function to_slug($str){
-		$slug = strtolower($str);
+	public function to_slug($str, $sep = '-'){
+		$slug = strtolower(trim($str));
+		$slug = preg_replace('/[\s\-\_]+/', $sep, $slug); 
 
 		return $slug;
 	}
@@ -302,70 +309,56 @@ class WPSea_Plugin_Generator {
 
 	public function build_file(){
 
-		$prefix = strtolower($_POST['plugin_name']) . '_';
-		$plugin_dir = WP_PLUGIN_DIR . '/' . strtolower($_POST['plugin_name']); 
-		$filename = $plugin_dir . '/' . strtolower($_POST['plugin_name']) . '.php'; 
+		$prefix = $this->to_slug($_POST['plugin_name'], '_') . '_';
+		$plugin_dir = WP_PLUGIN_DIR . '/' . $this->to_slug($_POST['plugin_name']); 
+		$filename = $plugin_dir . '/' . $this->to_slug($_POST['plugin_name']) . '.php'; 
 
-		if (! file_exists($plugin_dir))
-		{
-			if (  ! mkdir($plugin_dir, 0755))
-			{
+		if (! file_exists($plugin_dir)) {
+			if (  ! mkdir($plugin_dir, 0755)) {
 				error_log('COULD NOT CREATE DIRECTORY ' . $plugin_dir);
-			}
-			else
-			{
-				error_log('Created Directory ' . $plugin_dir);
-			}
+			} 
 		}
 
 		$fh = fopen($filename, 'w+');
-		if (! $fh){
+		if (! $fh) {
 			error_log('COULD NOT OPEN ' . $filename);
 			return;
-		}
-		else
-		{
-			error_log('Opened ' . $filename);
+		} 
+		
+		$header  = "<?php\n\n/*\n";		
+		if ( isset( $_POST['plugin_name'] ) ) {
+			$header .= $this->ret( "Plugin Name: {$_POST['plugin_name']}" );
 		}
 		
-		$header  = $this->ret( '/**' );		
-		fwrite( $fh, "/**\n" );
-		if ( isset( $_POST['plugin_name'] ) ) {
-			$header .= $this->ret( "* Plugin Name: {$_POST['plugin_name']}" );
-			fwrite( $fh, "* Plugin Name: {$_POST['plugin_name']}\n"  );
+		if ( isset( $_POST['plugin_description'] ) ) {
+			$header .= $this->ret( "Description: {$_POST['plugin_description']}" );
 		}
-		
-		if ( isset( $_POST['plugin_name'] ) ) {
-			$header .= $this->ret( "* Plugin Description: {$_POST['plugin_description']}" );
-			fwrite( $fh, "* Plugin Description: {$_POST['plugin_description']}\n" );
+
+		if ( isset( $_POST['plugin_uri'] ) ) {
+			$header .= $this->ret( "Plugin URI: {$_POST['plugin_uri']}" );
 		}
 
 		if ( isset( $_POST['plugin_version'] ) ) {
-			$header .= $this->ret( "* Version: {$_POST['plugin_version']}" );
-			fwrite( $fh, "* Version: {$_POST['plugin_version']}\n" );
+			$header .= $this->ret( "Version: {$_POST['plugin_version']}" );
 		}
 
 		if ( isset( $_POST['author_name'] ) ) {
-			$header .= $this->ret( "* Author: {$_POST['author_name']}" );
-			fwrite( $fh, "* Author: {$_POST['author_name']}\n" );
+			$header .= $this->ret( "Author: {$_POST['author_name']}" );
 		}
 
 		if ( isset( $_POST['author_uri'] ) ) {
-			$header .= $this->ret( "* Author URI: {$_POST['author_uri']}" );
-			fwrite( $fh, "* Author URI: {$_POST['author_uri']}\n" );
+			$header .= $this->ret( "Author URI: {$_POST['author_uri']}" );
 		}
 
 		$header .= $this->ret( "*/" );		
-		fwrite($fh, "*/\n\n\n" );
+		fwrite($fh, $header );
 
-		echo( '<pre>' );
-		echo( $header );
-		echo( '</pre>' );
 
 		$all_functions = '';
 		$all_hooks = '';
 
-		$all_functions .= "\n\n/*\n\tHooks\n*/\n\n";
+		$all_functions .= "\n/*\n\tHooks\n*/\n\n";
+		$all_hooks .= "\n\n/*\n\tActions\n*/\n\n" ;
 
 		if ( isset( $_POST['register_activation_hook'] ) ) {
 			$all_functions .= "function {$prefix}register_activation_hook(){\n}\n\n" ;
@@ -382,7 +375,6 @@ class WPSea_Plugin_Generator {
 			$all_hooks .= 'register_uninstall_hook( __FILE__, ' .  "'{$prefix}register_uninstall_hook'" .   ' ); ' . "\n";
 		}
 
-		$all_hooks .= "\n\n/*\n\tActions\n*/\n\n" ;
 
 		if ( isset( $_POST['init'] ) ) {
 			$all_functions .= "function {$prefix}init(){\n}\n\n" ;
@@ -437,8 +429,6 @@ class WPSea_Plugin_Generator {
 	public function ret( $str ){
 		return $str . "\n";
 	}
-
-
 
 
 }
